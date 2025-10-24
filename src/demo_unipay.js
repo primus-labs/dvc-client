@@ -41,6 +41,7 @@ async function main() {
     // noProxy: false
   });
   console.log('result', result);
+  console.log('proof fixture:', JSON.parse(result?.details?.proof_fixture ?? {}));
 }
 
 main();

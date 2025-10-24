@@ -47,6 +47,7 @@ async function main() {
 
   const result = await doProve(requests, responseResolves);
   console.log('result', result);
+  console.log('proof fixture:', JSON.parse(result?.details?.proof_fixture ?? {}));
 }
 
 main();
