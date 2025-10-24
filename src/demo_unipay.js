@@ -2,14 +2,14 @@ const { doProve, makeBinanceRequestParams } = require("./utils.js")
 
 async function main() {
   let origRequests = [];
-  // const authorization = ""; // Here set the Authorization
+  const authorization = ""; // Here set the Authorization
   if (authorization === "") {
     console.log("Should set Authorization first in file: src/demo_unipay.js#L5");
     process.exit(1);
   }
 
-  // const accounts = ["MK4", "HB", "S1-MK4", "S2-MK4", "MK4-BTC"];
-  const accounts = ["S2-MK4"];
+  const accounts = ["MK4", "HB", "S1-MK4", "S2-MK4", "MK4-BTC"];
+  // const accounts = ["S2-MK4"];
   for (let i = 0; i < accounts.length; i++) {
     const account = accounts[i];
     origRequests.push({
