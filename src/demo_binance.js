@@ -1,31 +1,6 @@
-# dvc-client
+const { doProve, makeBinanceRequestParams } = require("./utils.js")
 
-
-
-## Build
-
-```sh
-npm install
-```
-
-
-## Usage
-
-- Copy `.env.example` to `.env` and set your `PRIVATE_KEY` corresponding to the Base Sepolia or Base Mainnet.
-- Switch the `CHAIN_ID` and `RPC_URL` as needed. The default is for Base Sepolia.
-
-| CHAIN_ID | RPC_URL                  | Chain        |
-| -------- | ------------------------ | ------------ |
-| 84532    | https://sepolia.base.org | Base Sepolia |
-| 8453     | https://mainnet.base.org | Base Mainnet |
-
-
-### Binance Demo
-
-
-See [demo_binance.js](./src/demo_binance.js) and it's doc-comment for example usage and notes. 
-
-```js
+async function main() {
   /**
    * Generate signed Binance API request URLs for multiple accounts.
    *
@@ -72,10 +47,6 @@ See [demo_binance.js](./src/demo_binance.js) and it's doc-comment for example us
 
   const result = await doProve(requests, responseResolves);
   console.log('result', result);
-```
+}
 
-Then,
-
-```sh
-node src/demo_binance.js
-```
+main();

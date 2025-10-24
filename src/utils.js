@@ -1,0 +1,292 @@
+
+const { PrimusNetwork } = require('@primuslabs/network-core-sdk/dist');
+const dotenv = require('dotenv');
+const { ethers } = require('ethers');
+
+dotenv.config();
+const ZKTLS_PROVE_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/prove`
+const ZKTLS_RESULT_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/result`
+
+
+async function postJson(url, data, headers = {}) {
+  const start = Date.now();
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(data ?? {}),
+    });
+
+    const duration = Date.now() - start;
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(
+        `HTTP ${response.status} ${response.statusText} - ${url}\nResponse: ${text.slice(0, 300)}`
+      );
+    }
+
+    const result = await response.json().catch(() => {
+      throw new Error(`Invalid JSON response from ${url}`);
+    });
+
+    console.debug(`✅ POST ${url} (${duration}ms)`);
+    return result;
+
+  } catch (err) {
+    console.error(`❌ POST ${url} failed:`, err.message);
+    throw err;
+  }
+}
+
+
+async function zktlsProve(data, headers = {}) {
+  return await postJson(ZKTLS_PROVE_URL, data, headers);
+}
+
+async function zktlsResult(data, headers = {}) {
+  return await postJson(ZKTLS_RESULT_URL, data, headers);
+}
+
+async function doProve(requests, responseResolves, options = {}) {
+  const defaultOptions = {
+    sslCipher: 'ECDHE-RSA-AES128-GCM-SHA256',
+    algorithmType: 'mpctls',
+    specialTask: undefined,
+    noProxy: true,
+    runZkvm: true,
+  };
+  const opts = { ...defaultOptions, ...options };
+
+  if (!Array.isArray(requests) || requests.length !== responseResolves.length || requests.length === 0) {
+    throw new Error("Invalid 'requests' or 'responseResolves' size");
+  }
+
+  dotenv.config();
+
+  const requiredEnv = ["PRIVATE_KEY", "CHAIN_ID", "RPC_URL"];
+  for (const key of requiredEnv) {
+    if (!process.env[key]) {
+      throw new Error(`Missing environment variable: ${key}`);
+    }
+  }
+
+  const { PRIVATE_KEY, CHAIN_ID, RPC_URL } = process.env;
+
+  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+  const primusNetwork = new PrimusNetwork();
+
+  const startTime = Date.now();
+
+  try {
+    console.log("🚀 Initializing PrimusNetwork...");
+    const initResult = await primusNetwork.init(wallet, +CHAIN_ID, 'native');
+    console.log("✅ PrimusNetwork initialized:", initResult);
+  } catch (err) {
+    throw new Error(`PrimusNetwork init failed: ${err.message || err}`);
+  }
+
+  const attestParams = {
+    address: '0x810b7bacEfD5ba495bB688bbFD2501C904036AB7',
+  };
+
+  let attestResult, taskResult;
+
+  try {
+    console.log("📝 Submitting task...");
+    const submitStart = Date.now();
+    const submitResult = await primusNetwork.submitTask(attestParams);
+    // console.log('📝 submitTask result:', submitResult);
+    console.log(`✅ submitTask done (${Date.now() - submitStart}ms):`, submitResult);
+
+    const attestParamsFull = {
+      ...attestParams,
+      ...submitResult,
+      requests,
+      responseResolves,
+      sslCipher: opts.sslCipher,
+      attMode: { algorithmType: opts.algorithmType },
+      specialTask: opts.specialTask,
+      noProxy: opts.noProxy,
+      getAllJsonResponse: "true",
+    };
+
+    console.log("⚙️ Running attestation...");
+    const attestStart = Date.now();
+    attestResult = await primusNetwork.attest(attestParamsFull);
+    // console.log('📝 attest result:', attestResult);
+    console.log(`✅ attest done (${Date.now() - attestStart}ms):`, attestResult);
+
+    if (!attestResult?.[0]?.attestation) {
+      throw new Error("Attestation result invalid or empty");
+    }
+
+    console.log("🔍 Verifying and polling task result...");
+    const verifyStart = Date.now();
+    taskResult = await primusNetwork.verifyAndPollTaskResult({
+      taskId: attestResult[0].taskId,
+      reportTxHash: attestResult[0].reportTxHash,
+    });
+    // console.log('📝 Verification result:', taskResult);
+    console.log(`✅ Verification done (${Date.now() - verifyStart}ms):`, taskResult);
+
+  } catch (err) {
+    throw new Error(`Task execution failed: ${err.message || err}`);
+  }
+
+  const taskId = attestResult[0].taskId;
+  const allPlainResponse = primusNetwork.getAllJsonResponse(taskId);
+  // console.log('📝 allPlainResponse:', allPlainResponse);
+  if (!allPlainResponse) {
+    throw new Error("Unable to get plain JSON response");
+  }
+
+  const zkVmRequestData = {
+    attestationData: {
+      verification_type: "HASH_COMPARSION",
+      public_data: attestResult,
+      private_data: { plain_json_response: allPlainResponse },
+    },
+    requestid: taskId,
+  };
+
+  console.log("📦 zkVmRequestData:", JSON.stringify(zkVmRequestData));
+
+  if (!opts.runZkvm) {
+    console.log("⚠️ ZKVM execution skipped by option.");
+    return;
+  }
+
+  try {
+    const zkvmTaskStart = Date.now();
+    console.log("🚀 Request ZKVM proof...");
+    const sendZkVmRes = await zktlsProve(zkVmRequestData);
+    if (sendZkVmRes.code !== '0') {
+      throw new Error(`Request ZKVM failed: ${sendZkVmRes}`);
+    }
+
+    async function pollZkvmResult(taskId) {
+      const zkvmTaskStart = Date.now();
+      return new Promise((resolve, reject) => {
+        const poll = setInterval(async () => {
+          try {
+            const getZkVmRes = await zktlsResult({ requestid: taskId });
+            if (getZkVmRes.code === '0' && ['done', 'error'].includes(getZkVmRes.details.status)) {
+              clearInterval(poll);
+              clearTimeout(timeout);
+              console.log(`✅ ZKVM task done (${Date.now() - zkvmTaskStart}ms):`, getZkVmRes);
+              resolve(getZkVmRes);
+            }
+          } catch (pollErr) {
+            console.warn('⚠️ ZKVM result polling failed:', pollErr.message);
+          }
+        }, 3000);
+
+        const timeout = setTimeout(() => {
+          clearInterval(poll);
+          reject(new Error('⏰ Timeout waiting for ZKVM result (10 min)'));
+        }, 600000);
+      });
+    }
+
+    return await pollZkvmResult(taskId);
+
+  } catch (err) {
+    throw new Error(`ZKVM prove error: ${err.message || err}`);
+  } finally {
+    const totalDuration = Date.now() - startTime;
+    console.log(`🎯 Total duration: ${totalDuration}ms`);
+  }
+}
+
+
+/**
+ * Generate signed Binance API request URLs for multiple accounts.
+ *
+ * Each account must send **two** requests in strict order:
+ * 1. `GET /papi/v1/um/positionRisk`
+ * 2. `GET /papi/v1/balance`
+ *
+ * ⚠️ **Important:** For every account, always send the `positionRisk` request first,
+ * immediately followed by the `balance` request.
+ *
+ * ## Endpoint Notes
+ *
+ * - **GET /papi/v1/um/positionRisk**
+ *   - Do **not** include the `symbol` parameter.
+ *   - Use a larger `recvWindow`, e.g. `60000` (milliseconds).
+ *
+ * - **GET /papi/v1/balance**
+ *   - Do **not** include the `asset` parameter.
+ *   - Use a larger `recvWindow`, e.g. `60000` (milliseconds).
+ *
+ * ## Example Usage
+ *
+ * ```js
+ * const origRequests = [
+ *   {
+ *     url: "https://papi.binance.com/papi/v1/um/positionRisk?recvWindow=60000&timestamp=1760921486287&signature=f792e...",
+ *     headers: {
+ *       'X-MBX-APIKEY': 'nzI7iU3YRLlO1olZG8xsTQnnRQPcxKfrY...'
+ *     }
+ *   },
+ *   {
+ *     url: "https://papi.binance.com/papi/v1/balance?recvWindow=60000&timestamp=1760921486287&signature=f362...",
+ *     headers: {
+ *       'X-MBX-APIKEY': 'nzI7iU3YRLlO1olZG8xsTQnnRQPcxKfrY...'
+ *     }
+ *   }
+ * ];
+ *
+ * const { requests, responseResolves } = makeBinanceRequestParams(origRequests);
+ * ```
+ */
+function makeBinanceRequestParams(origRequests,
+  RISK_URL = "https://papi.binance.com/papi/v1/um/positionRisk",
+  BALANCE_URL = "https://papi.binance.com/papi/v1/balance") {
+
+  if (!Array.isArray(origRequests) || origRequests.length < 2 || origRequests.length % 2 !== 0) {
+    throw new Error("❌ Invalid input: 'origRequests' must be an even-length array (pairs of requests per account).");
+  }
+
+  const requests = [];
+  const responseResolves = [];
+
+  for (let i = 0; i < origRequests.length; i++) {
+    const origRequest = origRequests[i];
+    const isRisk = i % 2 === 0;
+    const expectedUrl = isRisk ? RISK_URL : BALANCE_URL;
+
+    if (!origRequest?.url?.startsWith(expectedUrl)) {
+      throw new Error(`❌ Invalid order at index ${i}: expected positionRisk request first, then balance request.`);
+    }
+
+    requests.push({
+      url: origRequest.url,
+      method: "GET",
+      header: { ...origRequest.headers },
+      body: "",
+    });
+
+    responseResolves.push([
+      {
+        keyName: `${i}`,
+        parseType: "json",
+        parsePath: "$",
+        op: "SHA256_EX",
+      },
+    ]);
+  }
+
+  return { requests, responseResolves };
+}
+
+
+
+module.exports = { zktlsProve, zktlsResult, doProve, makeBinanceRequestParams };
