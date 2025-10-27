@@ -1,9 +1,8 @@
-
+const ccxt = require('ccxt');
 const { PrimusNetwork } = require('@primuslabs/network-core-sdk/dist');
-const dotenv = require('dotenv');
 const { ethers } = require('ethers');
+require('dotenv').config();
 
-dotenv.config();
 const ZKTLS_PROVE_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/prove`
 const ZKTLS_RESULT_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/result`
 
@@ -66,8 +65,6 @@ async function doProve(requests, responseResolves, options = {}) {
   if (!Array.isArray(requests) || requests.length !== responseResolves.length || requests.length === 0) {
     throw new Error("Invalid 'requests' or 'responseResolves' size");
   }
-
-  dotenv.config();
 
   const requiredEnv = ["PRIVATE_KEY", "CHAIN_ID", "RPC_URL"];
   for (const key of requiredEnv) {
@@ -287,6 +284,54 @@ function makeBinanceRequestParams(origRequests,
   return { requests, responseResolves };
 }
 
+function getBinanceAccounts() {
+  const accounts = [];
 
+  const key = process.env.BINANCE_API_KEY;
+  const secret = process.env.BINANCE_API_SECRET;
+  if (key && secret) {
+    accounts.push({ key, secret });
+  }
+  for (let i = 1; i <= 100; i++) {
+    const key = process.env[`BINANCE_API_KEY${i}`];
+    const secret = process.env[`BINANCE_API_SECRET${i}`];
+    if (key && secret) {
+      accounts.push({ key, secret });
+    }
+  }
 
-module.exports = { zktlsProve, zktlsResult, doProve, makeBinanceRequestParams };
+  if (accounts.length === 0) {
+    throw new Error("Please configure at least one set of BINANCE_API_KEY{i} / BINANCE_API_SECRET{i} in .env.");
+  }
+
+  const seen = new Set();
+  for (const acc of accounts) {
+    if (seen.has(`${acc.key}${acc.secret}`)) {
+      throw new Error(`Duplicate BINANCE_API_KEY{i} detected`);
+    }
+    seen.add(`${acc.key}${acc.secret}`);
+  }
+  return accounts;
+}
+
+function makeBinanaceOrigRequests(accounts) {
+  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 120;
+  let signParams = { recvWindow: recvWindow * 1000 };
+
+  let origRequests = []
+  for (const acc of accounts) {
+    const exchange = new ccxt['binance']({
+      apiKey: acc.key,
+      secret: acc.secret,
+    });
+
+    let umPositionRiskRequest = exchange.sign('um/positionRisk', 'papi', 'GET', signParams);
+    let balanceRequest = exchange.sign('balance', 'papi', 'GET', signParams);
+    origRequests.push(umPositionRiskRequest);
+    origRequests.push(balanceRequest);
+  }
+
+  return origRequests;
+}
+
+module.exports = { zktlsProve, zktlsResult, doProve, makeBinanceRequestParams, getBinanceAccounts, makeBinanaceOrigRequests };
