@@ -3,16 +3,17 @@ const { doProve, makeBinanceRequestParams, getBinanceAccounts, makeBinanaceOrigR
 async function main() {
   // Configure at least one or more pairs of API_KEY and API_SECRET
   // in .env using `BINANCE_API_KEY{i}` and `BINANCE_API_SECRET{i}`.
-  
+
   const accounts = getBinanceAccounts();
   // console.log('accounts', accounts);
   const origRequests = makeBinanaceOrigRequests(accounts);
   // console.log('origRequests', origRequests);
   const { requests, responseResolves } = makeBinanceRequestParams(origRequests);
+  // console.log('requests', requests);
+  // console.log('responseResolves', responseResolves);
 
   const result = await doProve(requests, responseResolves);
-  console.log('result', result);
-  console.log('proof fixture:', JSON.parse(result?.details?.proof_fixture ?? {}));
+  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? {}));
 }
 
 main();

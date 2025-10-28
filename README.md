@@ -40,8 +40,7 @@ async function main() {
   const { requests, responseResolves } = makeBinanceRequestParams(origRequests);
 
   const result = await doProve(requests, responseResolves);
-  console.log('result', result);
-  console.log('proof fixture:', JSON.parse(result?.details?.proof_fixture ?? {}));
+  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? {}));
 }
 ```
 
@@ -49,4 +48,19 @@ Then,
 
 ```sh
 node src/demo_binance.js
+```
+
+
+## Docker build (binance)
+
+```sh
+# sudo docker build -t <image> .
+sudo docker build -t primuslabs/dvc-client:v0.1.0 .
+```
+
+Usage:
+
+```sh
+# docker run --rm --env-file .env <image>
+docker run --rm --env-file .env primuslabs/dvc-client:v0.1.0
 ```

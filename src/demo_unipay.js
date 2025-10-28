@@ -32,16 +32,15 @@ async function main() {
   const RISK_URL = "https://exchange.unipay.dev/public/positionRisk";
   const BALANCE_URL = "https://exchange.unipay.dev/public/balance";
   const { requests, responseResolves } = makeBinanceRequestParams(origRequests, RISK_URL, BALANCE_URL);
-  console.log('requests', requests);
-  console.log('responseResolves', responseResolves);
+  // console.log('requests', requests);
+  // console.log('responseResolves', responseResolves);
 
   const result = await doProve(requests, responseResolves, {
     sslCipher: 'ECDHE-ECDSA-AES128-GCM-SHA256',
     // runZkvm: false,
     // noProxy: false
   });
-  console.log('result', result);
-  console.log('proof fixture:', JSON.parse(result?.details?.proof_fixture ?? {}));
+  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? {}));
 }
 
 main();

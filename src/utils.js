@@ -6,6 +6,9 @@ require('dotenv').config();
 const ZKTLS_PROVE_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/prove`
 const ZKTLS_RESULT_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/result`
 
+let logVerbose = Number(process.env.LOG_VERBOSE) || 0;
+if (logVerbose < 0) logVerbose = 9;
+
 
 async function postJson(url, data, headers = {}) {
   const start = Date.now();
@@ -134,7 +137,7 @@ async function doProve(requests, responseResolves, options = {}) {
     console.log(`✅ Verification done (${Date.now() - verifyStart}ms):`, taskResult);
 
   } catch (err) {
-    throw new Error(`Task execution failed: ${err.message || err}`);
+    throw new Error(`Task execution failed: ${err.message || JSON.stringify(err)}`);
   }
 
   const taskId = attestResult[0].taskId;
@@ -153,7 +156,9 @@ async function doProve(requests, responseResolves, options = {}) {
     requestid: taskId,
   };
 
-  console.log("📦 zkVmRequestData:", JSON.stringify(zkVmRequestData));
+  if (logVerbose > 0) {
+    console.log("📦 zkVmRequestData:", JSON.stringify(zkVmRequestData));
+  }
 
   if (!opts.runZkvm) {
     console.log("⚠️ ZKVM execution skipped by option.");
@@ -161,12 +166,27 @@ async function doProve(requests, responseResolves, options = {}) {
   }
 
   try {
-    const zkvmTaskStart = Date.now();
     console.log("🚀 Request ZKVM proof...");
-    const sendZkVmRes = await zktlsProve(zkVmRequestData);
-    if (sendZkVmRes.code !== '0') {
-      throw new Error(`Request ZKVM failed: ${sendZkVmRes}`);
+    async function sendWithRetry(zkVmRequestData, maxRetries = 10, delayMs = 5000) {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const sendZkVmRes = await zktlsProve(zkVmRequestData);
+        if (sendZkVmRes.code === '0') {
+          return sendZkVmRes;
+        }
+
+        if (sendZkVmRes.code === '10002') {
+          console.warn(`Request ZKVM service is busy, retrying ${attempt}/${maxRetries}...`);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+        }
+
+        throw new Error(`Request ZKVM failed: ${JSON.stringify(sendZkVmRes)}`);
+      }
     }
+    await sendWithRetry(zkVmRequestData);
+
 
     async function pollZkvmResult(taskId) {
       const zkvmTaskStart = Date.now();
@@ -183,7 +203,7 @@ async function doProve(requests, responseResolves, options = {}) {
           } catch (pollErr) {
             console.warn('⚠️ ZKVM result polling failed:', pollErr.message);
           }
-        }, 3000);
+        }, 10000);
 
         const timeout = setTimeout(() => {
           clearInterval(poll);
@@ -315,7 +335,7 @@ function getBinanceAccounts() {
 }
 
 function makeBinanaceOrigRequests(accounts) {
-  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 120;
+  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 60;
   let signParams = { recvWindow: recvWindow * 1000 };
 
   let origRequests = []
