@@ -37,11 +37,11 @@ async function postJson(url, data, headers = {}) {
       throw new Error(`Invalid JSON response from ${url}`);
     });
 
-    console.debug(`✅ POST ${url} (${duration}ms)`);
+    console.debug(`✅ fetch ${url} (${duration}ms)`);
     return result;
 
   } catch (err) {
-    console.error(`❌ POST ${url} failed:`, err.message);
+    console.error(`❌ fetch ${url} failed:`, err.message);
     throw err;
   }
 }
