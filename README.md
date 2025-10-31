@@ -55,12 +55,18 @@ node src/demo_binance.js
 
 ```sh
 # sudo docker build -t <image> .
-sudo docker build -t primuslabs/dvc-client:v0.1.1 .
+sudo docker build -t primuslabs/dvc-client:v0.1.2 .
+sudo docker build -t primuslabs/dvc-client:latest .
 ```
 
 Usage:
 
 ```sh
 # docker run --rm --env-file .env <image>
-docker run --rm --env-file .env primuslabs/dvc-client:v0.1.1
+docker run --rm --env-file .env primuslabs/dvc-client:latest
+```
+or 
+
+```sh
+docker compose up
 ```

@@ -16,11 +16,15 @@ async function main() {
   console.log(`Now: ${new Date()}`);
   // Configure at least one or more pairs of API_KEY and API_SECRET
   // in .env using `BINANCE_API_KEY{i}` and `BINANCE_API_SECRET{i}`.
-  const { requests, responseResolves } = getBinanaceRequestParams();
-  const result = await doProve(requests, responseResolves, {
-    requestParamsCallback: getBinanaceRequestParams,
-  });
-  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? "{}"));
+  try {
+    const { requests, responseResolves } = getBinanaceRequestParams();
+    const result = await doProve(requests, responseResolves, {
+      requestParamsCallback: getBinanaceRequestParams,
+    });
+    console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? "{}"));
+  } catch (error) {
+    console.log('main error:', error);
+  }
 }
 
 const interval = Number(process.env.INTERVAL) || 1800;

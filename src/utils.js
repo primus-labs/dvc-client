@@ -171,7 +171,7 @@ async function doProve(requests, responseResolves, options = {}) {
     }
     console.log("⚙️ Running attestation...");
     const attestStart = Date.now();
-    attestResult = await attestWithRetry(5, 1000);
+    attestResult = await attestWithRetry(4, 1000);
     console.log(`✅ attest done (${Date.now() - attestStart}ms):`, attestResult);
 
 
