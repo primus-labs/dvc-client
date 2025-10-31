@@ -40,7 +40,7 @@ async function main() {
     // runZkvm: false,
     // noProxy: false
   });
-  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? {}));
+  console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? "{}"));
 }
 
 main();

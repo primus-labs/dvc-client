@@ -62,6 +62,7 @@ async function doProve(requests, responseResolves, options = {}) {
     specialTask: undefined,
     noProxy: true,
     runZkvm: true,
+    requestParamsCallback: undefined,
   };
   const opts = { ...defaultOptions, ...options };
 
@@ -97,47 +98,116 @@ async function doProve(requests, responseResolves, options = {}) {
   };
 
   let attestResult, taskResult;
-
   try {
+    async function submitTaskWithRetry(attestParams, maxRetries = 5, baseDelay = 1000) {
+      let attempt = 0;
+      while (true) {
+        try {
+          const submitResult = await primusNetwork.submitTask(attestParams);
+          return submitResult;
+        } catch (err) {
+          attempt++;
+          console.warn(`⚠️ submitTask attempt ${attempt} failed:`, err?.message || err);
+
+          if (attempt > maxRetries) {
+            console.error(`❌ submitTask failed after ${maxRetries} retries`);
+            throw err;
+          }
+
+          const delay = baseDelay * 2 ** (attempt - 1);
+          console.log(`⏳ Retrying in ${delay} ms...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+
     console.log("📝 Submitting task...");
     const submitStart = Date.now();
-    const submitResult = await primusNetwork.submitTask(attestParams);
-    // console.log('📝 submitTask result:', submitResult);
+    const submitResult = await submitTaskWithRetry(attestParams, 5, 1000);
     console.log(`✅ submitTask done (${Date.now() - submitStart}ms):`, submitResult);
 
-    const attestParamsFull = {
-      ...attestParams,
-      ...submitResult,
-      requests,
-      responseResolves,
-      sslCipher: opts.sslCipher,
-      attMode: { algorithmType: opts.algorithmType },
-      specialTask: opts.specialTask,
-      noProxy: opts.noProxy,
-      getAllJsonResponse: "true",
-    };
+    async function attestWithRetry(maxRetries = 3, baseDelay = 1000) {
+      let attempt = 0;
+      while (true) {
+        let reqs = requests;
+        let resps = responseResolves;
+        if (opts.requestParamsCallback) {
+          const { requests, responseResolves } = opts.requestParamsCallback();
+          reqs = requests;
+          resps = responseResolves;
+        }
+        const attestParamsFull = {
+          ...attestParams,
+          ...submitResult,
+          requests: reqs,
+          responseResolves: resps,
+          sslCipher: opts.sslCipher,
+          attMode: { algorithmType: opts.algorithmType },
+          specialTask: opts.specialTask,
+          noProxy: opts.noProxy,
+          getAllJsonResponse: "true",
+        };
 
+        try {
+          const attestResult = await primusNetwork.attest(attestParamsFull, 5 * 60 * 1000);
+          if (!attestResult?.[0]?.attestation) {
+            throw new Error("Attestation result invalid or empty");
+          }
+          return attestResult;
+        } catch (err) {
+          attempt++;
+          console.warn(`⚠️ attest attempt ${attempt} failed:`, err?.message || err);
+
+          if (attempt > maxRetries) {
+            console.error(`❌ attest failed after ${maxRetries} retries`);
+            throw err;
+          }
+
+          const delay = baseDelay * 2 ** (attempt - 1);
+          console.log(`⏳ Retrying in ${delay} ms...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
     console.log("⚙️ Running attestation...");
     const attestStart = Date.now();
-    attestResult = await primusNetwork.attest(attestParamsFull);
-    // console.log('📝 attest result:', attestResult);
+    attestResult = await attestWithRetry(5, 1000);
     console.log(`✅ attest done (${Date.now() - attestStart}ms):`, attestResult);
 
-    if (!attestResult?.[0]?.attestation) {
-      throw new Error("Attestation result invalid or empty");
+
+
+    async function verifyAndPollTaskResultWithRetry(attestResult, maxRetries = 5, baseDelay = 1000) {
+      let attempt = 0;
+      while (true) {
+        try {
+          const taskResult = await primusNetwork.verifyAndPollTaskResult({
+            taskId: attestResult[0].taskId,
+            reportTxHash: attestResult[0].reportTxHash,
+          });
+          return taskResult;
+        } catch (err) {
+          attempt++;
+          console.warn(`⚠️ verifyAndPollTaskResult attempt ${attempt} failed:`, err?.message || err);
+
+          if (attempt > maxRetries) {
+            console.error(`❌ verifyAndPollTaskResult failed after ${maxRetries} retries`);
+            throw err;
+          }
+
+          const delay = baseDelay * 2 ** (attempt - 1);
+          console.log(`⏳ Retrying in ${delay} ms...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
     }
+
 
     console.log("🔍 Verifying and polling task result...");
     const verifyStart = Date.now();
-    taskResult = await primusNetwork.verifyAndPollTaskResult({
-      taskId: attestResult[0].taskId,
-      reportTxHash: attestResult[0].reportTxHash,
-    });
-    // console.log('📝 Verification result:', taskResult);
+    taskResult = await verifyAndPollTaskResultWithRetry(attestResult, 5, 1000);
     console.log(`✅ Verification done (${Date.now() - verifyStart}ms):`, taskResult);
-
   } catch (err) {
-    throw new Error(`Task execution failed: ${err.message || JSON.stringify(err)}`);
+    throw new Error(`Task execution failed: ${JSON.stringify(err)}`);
   }
 
   const taskId = attestResult[0].taskId;
