@@ -83,7 +83,6 @@ async function doProve(requests, responseResolves, options = {}) {
   const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
   const primusNetwork = new PrimusNetwork();
 
-  const startTime = Date.now();
 
   try {
     console.log("🚀 Initializing PrimusNetwork...");
@@ -230,10 +229,26 @@ async function doProve(requests, responseResolves, options = {}) {
     console.log("📦 zkVmRequestData:", JSON.stringify(zkVmRequestData));
   }
 
-  if (!opts.runZkvm) {
-    console.log("⚠️ ZKVM execution skipped by option.");
-    return;
-  }
+  return zkVmRequestData;
+
+  // if (!opts.runZkvm) {
+  //   console.log("⚠️ ZKVM execution skipped by option.");
+  //   return;
+  // }
+}
+
+async function doProve2(zkVmRequestData1, zkVmRequestData2) {
+  // make zkVmRequestData
+  const x = BigInt(zkVmRequestData1.requestid) ^ BigInt(zkVmRequestData2.requestid);
+  const requestid = "0x" + x.toString(16).padStart(64, "0");
+  const zkVmRequestData = {
+    attestationData: {
+      "unified": zkVmRequestData1.attestationData,
+      "spot": zkVmRequestData2.attestationData,
+    },
+    requestid: requestid,
+    version: "20251209" // DO NOT EDIT THIS VERSION
+  };
 
   try {
     console.log("🚀 Request ZKVM proof...");
@@ -258,12 +273,12 @@ async function doProve(requests, responseResolves, options = {}) {
     await sendWithRetry(zkVmRequestData);
 
 
-    async function pollZkvmResult(taskId) {
+    async function pollZkvmResult(requestid) {
       const zkvmTaskStart = Date.now();
       return new Promise((resolve, reject) => {
         const poll = setInterval(async () => {
           try {
-            const getZkVmRes = await zktlsResult({ requestid: taskId });
+            const getZkVmRes = await zktlsResult({ requestid: requestid });
             if (getZkVmRes.code === '0' && ['done', 'error'].includes(getZkVmRes.details.status)) {
               clearInterval(poll);
               clearTimeout(timeout);
@@ -282,16 +297,13 @@ async function doProve(requests, responseResolves, options = {}) {
       });
     }
 
-    return await pollZkvmResult(taskId);
+    return await pollZkvmResult(zkVmRequestData.requestid);
 
   } catch (err) {
     throw new Error(`ZKVM prove error: ${err.message || err}`);
   } finally {
-    const totalDuration = Date.now() - startTime;
-    console.log(`🎯 Total duration: ${totalDuration}ms`);
   }
 }
-
 
 /**
  * Generate signed Binance API request URLs for multiple accounts.
@@ -374,6 +386,36 @@ function makeBinanceRequestParams(origRequests,
   return { requests, responseResolves };
 }
 
+function makeBinanceSpotRequestParams(origRequests) {
+  if (!Array.isArray(origRequests) || origRequests.length < 1) {
+    throw new Error("❌ Invalid input: 'origRequests' must be greater than 1.");
+  }
+
+  const requests = [];
+  const responseResolves = [];
+
+  for (let i = 0; i < origRequests.length; i++) {
+    const origRequest = origRequests[i];
+    requests.push({
+      url: origRequest.url,
+      method: "GET",
+      header: { ...origRequest.headers },
+      body: "",
+    });
+
+    responseResolves.push([
+      {
+        keyName: `${i}`,
+        parseType: "json",
+        parsePath: "$",
+        op: "SHA256_EX",
+      },
+    ]);
+  }
+
+  return { requests, responseResolves };
+}
+
 function getBinanceAccounts() {
   const accounts = [];
 
@@ -424,4 +466,26 @@ function makeBinanaceOrigRequests(accounts) {
   return origRequests;
 }
 
-module.exports = { zktlsProve, zktlsResult, doProve, makeBinanceRequestParams, getBinanceAccounts, makeBinanaceOrigRequests };
+function makeBinanaceSpotOrigRequests(accounts) {
+  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 60;
+  let signParams = { recvWindow: recvWindow * 1000 };
+
+  let origRequests = []
+  for (const acc of accounts) {
+    const exchange = new ccxt['binance']({
+      apiKey: acc.key,
+      secret: acc.secret,
+    });
+
+    let spotBalanceRequest = exchange.sign('account', 'private', 'GET', { ...signParams, omitZeroBalances: true });
+    origRequests.push(spotBalanceRequest);
+  }
+
+  return origRequests;
+}
+
+module.exports = {
+  zktlsProve, zktlsResult, doProve, doProve2, getBinanceAccounts,
+  makeBinanceRequestParams, makeBinanaceOrigRequests,
+  makeBinanceSpotRequestParams, makeBinanaceSpotOrigRequests
+};

@@ -1,7 +1,7 @@
 services:
   dvc-client:
     # build: .
-    image: primuslabs/dvc-client:latest
+    image: primuslabs/dvc-client:v0.1.3
     container_name: dvc-client
     env_file: .env
     restart: always
