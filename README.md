@@ -1,5 +1,6 @@
 # dvc-client
 
+## Overview
 
 
 ## Build
@@ -12,7 +13,7 @@ npm install
 ## Usage
 
 - Copy `.env.example` to `.env` and set your `PRIVATE_KEY` corresponding to the Base Sepolia or Base Mainnet.
-- Configure at least one or more pairs of API_KEY and API_SECRET using `BINANCE_API_KEY{i}` and `BINANCE_API_SECRET{i}`.
+- Configure at least one or more pairs of **API_KEY** and **API_SECRET** using `BINANCE_API_KEY{i}` and `BINANCE_API_SECRET{i}`.
 - Switch the `CHAIN_ID` and `RPC_URL` as needed. The default is for Base Sepolia.
 
 | CHAIN_ID | RPC_URL                  | Chain        |
@@ -33,14 +34,13 @@ node src/binance.js
 ```sh
 # sudo docker build -t <image> .
 sudo docker build -t primuslabs/dvc-client:v0.1.3 .
-sudo docker build -t primuslabs/dvc-client:latest .
 ```
 
 Usage:
 
 ```sh
 # docker run --rm --env-file .env <image>
-docker run --rm --env-file .env primuslabs/dvc-client:latest
+docker run --rm --env-file .env primuslabs/dvc-client:v0.1.3
 ```
 or 
 

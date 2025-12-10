@@ -1,4 +1,4 @@
-const { doProve, doProve2, getBinanceAccounts,
+const { doZkTls, doProve, getBinanceAccounts,
   makeBinanceRequestParams, makeBinanaceOrigRequests,
   makeBinanceSpotRequestParams, makeBinanaceSpotOrigRequests } = require("./utils.js")
 require('dotenv').config();
@@ -34,17 +34,17 @@ async function main() {
     let data2 = null;
     {
       const { requests, responseResolves } = getBinanaceRequestParams();
-      data1 = await doProve(requests, responseResolves, {
+      data1 = await doZkTls(requests, responseResolves, {
         requestParamsCallback: getBinanaceRequestParams,
       });
     }
     {
       const { requests, responseResolves } = getBinanaceSpotRequestParams();
-      data2 = await doProve(requests, responseResolves, {
+      data2 = await doZkTls(requests, responseResolves, {
         requestParamsCallback: getBinanaceSpotRequestParams,
       });
     }
-    const result = await doProve2(data1, data2);
+    const result = await doProve(data1, data2);
     console.log('proof fixture(json):', JSON.parse(result?.details?.proof_fixture ?? "{}"));
   } catch (error) {
     console.log('main error:', error);

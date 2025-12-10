@@ -55,7 +55,7 @@ async function zktlsResult(data, headers = {}) {
   return await postJson(ZKTLS_RESULT_URL, data, headers);
 }
 
-async function doProve(requests, responseResolves, options = {}) {
+async function doZkTls(requests, responseResolves, options = {}) {
   const defaultOptions = {
     sslCipher: 'ECDHE-RSA-AES128-GCM-SHA256',
     algorithmType: 'mpctls',
@@ -237,7 +237,7 @@ async function doProve(requests, responseResolves, options = {}) {
   // }
 }
 
-async function doProve2(zkVmRequestData1, zkVmRequestData2) {
+async function doProve(zkVmRequestData1, zkVmRequestData2) {
   // make zkVmRequestData
   const x = BigInt(zkVmRequestData1.requestid) ^ BigInt(zkVmRequestData2.requestid);
   const requestid = "0x" + x.toString(16).padStart(64, "0");
@@ -485,7 +485,7 @@ function makeBinanaceSpotOrigRequests(accounts) {
 }
 
 module.exports = {
-  zktlsProve, zktlsResult, doProve, doProve2, getBinanceAccounts,
+  zktlsProve, zktlsResult, doZkTls, doProve, getBinanceAccounts,
   makeBinanceRequestParams, makeBinanaceOrigRequests,
   makeBinanceSpotRequestParams, makeBinanaceSpotOrigRequests
 };
