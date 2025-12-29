@@ -239,20 +239,29 @@ async function doZkTls(requests, responseResolves, options = {}) {
 
 async function doProve(allData) {
   // make zkVmRequestData
-  const x = BigInt(allData[0].requestid) ^ BigInt(allData[1].requestid) ^ BigInt(allData[2].requestid)
-    ^ BigInt(allData[3].requestid) ^ BigInt(allData[4].requestid);
+  let x = 0n;
+  const attestationData = {};
+  const mapping = [
+    ["unified", allData[0]],
+    ["spot", allData[1]],
+    ["feature", allData[2]],
+    ["asterSpot", allData[3]],
+    ["asterFeature", allData[4]],
+  ];
+
+  for (const [key, item] of mapping) {
+    if (!item) continue;
+    console.log('key', key)
+    x ^= BigInt(item.requestid);
+    attestationData[key] = item.attestationData;
+  }
   const requestid = "0x" + x.toString(16).padStart(64, "0");
   const zkVmRequestData = {
-    attestationData: {
-      "unified": allData[0].attestationData,
-      "spot": allData[1].attestationData,
-      "feature": allData[2].attestationData,
-      "asterSpot": allData[3].attestationData,
-      "asterFeature": allData[4].attestationData,
-    },
-    requestid: requestid,
-    version: "20251229" // DO NOT EDIT THIS VERSION
+    attestationData,
+    requestid,
+    version: "20251229", // DO NOT EDIT THIS VERSION
   };
+  // console.log('zkVmRequestData', JSON.stringify(zkVmRequestData));
 
   try {
     console.log("🚀 Request ZKVM proof...");
@@ -327,7 +336,7 @@ function getAccounts(source) {
   }
 
   if (accounts.length === 0) {
-    throw new Error(`Please configure at least one set of ${source}_API_KEY{i} / ${source}_API_SECRET{i} in .env.`);
+    return accounts;
   }
 
   const seen = new Set();
@@ -342,6 +351,14 @@ function getAccounts(source) {
 
 function getBinanceAccounts() { return getAccounts('BINANCE'); }
 function getAsterAccounts() { return getAccounts('ASTER'); }
+function checkAccounts() {
+  const hasBinance = getBinanceAccounts().length > 0;
+  const hasAster = getAsterAccounts().length > 0;
+  if (!(hasBinance || hasAster)) {
+    throw new Error(`Please configure at least one set of BINANCE_API_KEY{i}/BINANCE_API_SECRET{i} or ASTER_API_KEY{i}/ASTER_API_SECRET{i} in .env.`);
+  }
+  return { hasBinance, hasAster };
+}
 
 function signQuery(params, secret) {
   const query = new URLSearchParams(params).toString();
@@ -483,7 +500,7 @@ function makeAllRequestParams() {
 }
 
 module.exports = {
-  zktlsProve, zktlsResult, doZkTls, doProve,
+  zktlsProve, zktlsResult, doZkTls, doProve, checkAccounts,
   makeAsterSpotRequestParams, makeAsterFeatureRequestParams,
   makeBinanceSpotRequestParams, makeBinanceFeatureRequestParams, makeBinanceUnifiedRequestParams,
   makeAllRequestParams,
