@@ -1,6 +1,6 @@
-const ccxt = require('ccxt');
 const { PrimusNetwork } = require('@primuslabs/network-core-sdk/dist');
 const { ethers } = require('ethers');
+const crypto = require("crypto");
 require('dotenv').config();
 
 const ZKTLS_PROVE_URL = `${process.env.ZKVM_SERVICE_URL}/zktls/prove`
@@ -237,17 +237,21 @@ async function doZkTls(requests, responseResolves, options = {}) {
   // }
 }
 
-async function doProve(zkVmRequestData1, zkVmRequestData2) {
+async function doProve(allData) {
   // make zkVmRequestData
-  const x = BigInt(zkVmRequestData1.requestid) ^ BigInt(zkVmRequestData2.requestid);
+  const x = BigInt(allData[0].requestid) ^ BigInt(allData[1].requestid) ^ BigInt(allData[2].requestid)
+    ^ BigInt(allData[3].requestid) ^ BigInt(allData[4].requestid);
   const requestid = "0x" + x.toString(16).padStart(64, "0");
   const zkVmRequestData = {
     attestationData: {
-      "unified": zkVmRequestData1.attestationData,
-      "spot": zkVmRequestData2.attestationData,
+      "unified": allData[0].attestationData,
+      "spot": allData[1].attestationData,
+      "feature": allData[2].attestationData,
+      "asterSpot": allData[3].attestationData,
+      "asterFeature": allData[4].attestationData,
     },
     requestid: requestid,
-    version: "20251209" // DO NOT EDIT THIS VERSION
+    version: "20251229" // DO NOT EDIT THIS VERSION
   };
 
   try {
@@ -305,88 +309,77 @@ async function doProve(zkVmRequestData1, zkVmRequestData2) {
   }
 }
 
-/**
- * Generate signed Binance API request URLs for multiple accounts.
- *
- * Each account must send **two** requests in strict order:
- * 1. `GET /papi/v1/um/positionRisk`
- * 2. `GET /papi/v1/balance`
- *
- * ⚠️ **Important:** For every account, always send the `positionRisk` request first,
- * immediately followed by the `balance` request.
- *
- * ## Endpoint Notes
- *
- * - **GET /papi/v1/um/positionRisk**
- *   - Do **not** include the `symbol` parameter.
- *   - Use a larger `recvWindow`, e.g. `60000` (milliseconds).
- *
- * - **GET /papi/v1/balance**
- *   - Do **not** include the `asset` parameter.
- *   - Use a larger `recvWindow`, e.g. `60000` (milliseconds).
- *
- * ## Example Usage
- *
- * ```js
- * const origRequests = [
- *   {
- *     url: "https://papi.binance.com/papi/v1/um/positionRisk?recvWindow=60000&timestamp=1760921486287&signature=f792e...",
- *     headers: {
- *       'X-MBX-APIKEY': 'nzI7iU3YRLlO1olZG8xsTQnnRQPcxKfrY...'
- *     }
- *   },
- *   {
- *     url: "https://papi.binance.com/papi/v1/balance?recvWindow=60000&timestamp=1760921486287&signature=f362...",
- *     headers: {
- *       'X-MBX-APIKEY': 'nzI7iU3YRLlO1olZG8xsTQnnRQPcxKfrY...'
- *     }
- *   }
- * ];
- *
- * const { requests, responseResolves } = makeBinanceRequestParams(origRequests);
- * ```
- */
-function makeBinanceRequestParams(origRequests,
-  RISK_URL = "https://papi.binance.com/papi/v1/um/positionRisk",
-  BALANCE_URL = "https://papi.binance.com/papi/v1/balance") {
+/*************************!SECTION */
+function getAccounts(source) {
+  const accounts = [];
 
-  if (!Array.isArray(origRequests) || origRequests.length < 2 || origRequests.length % 2 !== 0) {
-    throw new Error("❌ Invalid input: 'origRequests' must be an even-length array (pairs of requests per account).");
+  const key = process.env[`${source}_API_KEY`];
+  const secret = process.env[`${source}_API_SECRET`];
+  if (key && secret) {
+    accounts.push({ key, secret });
   }
-
-  const requests = [];
-  const responseResolves = [];
-
-  for (let i = 0; i < origRequests.length; i++) {
-    const origRequest = origRequests[i];
-    const isRisk = i % 2 === 0;
-    const expectedUrl = isRisk ? RISK_URL : BALANCE_URL;
-
-    if (!origRequest?.url?.startsWith(expectedUrl)) {
-      throw new Error(`❌ Invalid order at index ${i}: expected positionRisk request first, then balance request.`);
+  for (let i = 1; i <= 100; i++) {
+    const key = process.env[`${source}_API_KEY${i}`];
+    const secret = process.env[`${source}_API_SECRET${i}`];
+    if (key && secret) {
+      accounts.push({ key, secret });
     }
-
-    requests.push({
-      url: origRequest.url,
-      method: "GET",
-      header: { ...origRequest.headers },
-      body: "",
-    });
-
-    responseResolves.push([
-      {
-        keyName: `${i}`,
-        parseType: "json",
-        parsePath: "$",
-        op: "SHA256_EX",
-      },
-    ]);
   }
 
-  return { requests, responseResolves };
+  if (accounts.length === 0) {
+    throw new Error(`Please configure at least one set of ${source}_API_KEY{i} / ${source}_API_SECRET{i} in .env.`);
+  }
+
+  const seen = new Set();
+  for (const acc of accounts) {
+    if (seen.has(`${acc.key}${acc.secret}`)) {
+      throw new Error(`Duplicate ${source}_API_KEY{i} detected`);
+    }
+    seen.add(`${acc.key}${acc.secret}`);
+  }
+  return accounts;
 }
 
-function makeBinanceSpotRequestParams(origRequests) {
+function getBinanceAccounts() { return getAccounts('BINANCE'); }
+function getAsterAccounts() { return getAccounts('ASTER'); }
+
+function signQuery(params, secret) {
+  const query = new URLSearchParams(params).toString();
+  const signature = crypto.createHmac("sha256", secret).update(query).digest("hex");
+  return `${query}&signature=${signature}`;
+}
+
+function makerOrigRequests(url, accounts, params = {}) {
+  const recvWindow = Number(process.env.RECV_WINDOW) || 60;
+  let signParams = { ...params, recvWindow: recvWindow * 1000 };
+
+  let origRequests = []
+  for (const acc of accounts) {
+    const timestamp = Date.now();
+    const query = signQuery({ ...signParams, timestamp }, acc.secret);
+
+    const origRequest = {
+      url: `${url}?${query}`,
+      headers: { "X-MBX-APIKEY": acc.key }
+    };
+
+    origRequests.push(origRequest);
+  }
+
+  return origRequests;
+}
+
+function makerBinanceOrigRequests(url, params = {}) {
+  const accounts = getBinanceAccounts();
+  return makerOrigRequests(url, accounts, params);
+}
+
+function makerAsterOrigRequests(url, params = {}) {
+  const accounts = getAsterAccounts();
+  return makerOrigRequests(url, accounts, params);
+}
+
+function makeZkTLSRequestParams(origRequests) {
   if (!Array.isArray(origRequests) || origRequests.length < 1) {
     throw new Error("❌ Invalid input: 'origRequests' must be greater than 1.");
   }
@@ -416,76 +409,82 @@ function makeBinanceSpotRequestParams(origRequests) {
   return { requests, responseResolves };
 }
 
-function getBinanceAccounts() {
-  const accounts = [];
-
-  const key = process.env.BINANCE_API_KEY;
-  const secret = process.env.BINANCE_API_SECRET;
-  if (key && secret) {
-    accounts.push({ key, secret });
-  }
-  for (let i = 1; i <= 100; i++) {
-    const key = process.env[`BINANCE_API_KEY${i}`];
-    const secret = process.env[`BINANCE_API_SECRET${i}`];
-    if (key && secret) {
-      accounts.push({ key, secret });
-    }
-  }
-
-  if (accounts.length === 0) {
-    throw new Error("Please configure at least one set of BINANCE_API_KEY{i} / BINANCE_API_SECRET{i} in .env.");
-  }
-
-  const seen = new Set();
-  for (const acc of accounts) {
-    if (seen.has(`${acc.key}${acc.secret}`)) {
-      throw new Error(`Duplicate BINANCE_API_KEY{i} detected`);
-    }
-    seen.add(`${acc.key}${acc.secret}`);
-  }
-  return accounts;
+function makeAsterSpotRequestParams() {
+  const url = "https://sapi.asterdex.com/api/v1/account";
+  const origRequests = makerAsterOrigRequests(url);
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
+}
+function makeAsterFeatureRequestParams() {
+  const url = "https://fapi.asterdex.com/fapi/v2/balance";
+  const origRequests = makerAsterOrigRequests(url);
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
-function makeBinanaceOrigRequests(accounts) {
-  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 60;
-  let signParams = { recvWindow: recvWindow * 1000 };
-
-  let origRequests = []
-  for (const acc of accounts) {
-    const exchange = new ccxt['binance']({
-      apiKey: acc.key,
-      secret: acc.secret,
-    });
-
-    let umPositionRiskRequest = exchange.sign('um/positionRisk', 'papi', 'GET', signParams);
-    let balanceRequest = exchange.sign('balance', 'papi', 'GET', signParams);
-    origRequests.push(umPositionRiskRequest);
-    origRequests.push(balanceRequest);
-  }
-
-  return origRequests;
+function makeBinanceSpotRequestParams() {
+  const url = "https://api.binance.com/api/v3/account";
+  const origRequests = makerBinanceOrigRequests(url, { omitZeroBalances: true });
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
+}
+function makeBinanceFeatureRequestParams() {
+  const url = "https://fapi.binance.com/fapi/v3/balance";
+  const origRequests = makerBinanceOrigRequests(url);
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
-function makeBinanaceSpotOrigRequests(accounts) {
-  const recvWindow = Number(process.env.BINANCE_RECV_WINDOW) || 60;
-  let signParams = { recvWindow: recvWindow * 1000 };
 
-  let origRequests = []
-  for (const acc of accounts) {
-    const exchange = new ccxt['binance']({
-      apiKey: acc.key,
-      secret: acc.secret,
-    });
+function makeBinanceUnifiedRiskRequestParams() {
+  const url = "https://papi.binance.com/papi/v1/um/positionRisk";
+  const origRequests = makerBinanceOrigRequests(url);
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
+}
 
-    let spotBalanceRequest = exchange.sign('account', 'private', 'GET', { ...signParams, omitZeroBalances: true });
-    origRequests.push(spotBalanceRequest);
+function makeBinanceUnifiedBalanceRequestParams() {
+  const url = "https://papi.binance.com/papi/v1/balance";
+  const origRequests = makerBinanceOrigRequests(url);
+  return { origRequests, ...makeZkTLSRequestParams(origRequests) };
+}
+
+function makeBinanceUnifiedRequestParams() {
+  let risk = makeBinanceUnifiedRiskRequestParams();
+  let balance = makeBinanceUnifiedBalanceRequestParams();
+
+  if (!Array.isArray(risk.origRequests) || !Array.isArray(balance.origRequests)
+    || risk.origRequests.length !== balance.origRequests.length
+    || risk.origRequests.length < 1) {
+    throw new Error("❌ Invalid input: 'risk.origRequests' or 'balance.origRequests'.");
   }
 
-  return origRequests;
+  // combine risk|balance|risk|balance|...
+  let origRequests = [];
+  let requests = [];
+  let responseResolves = [];
+  for (let i = 0; i < risk.origRequests.length; i++) {
+    origRequests.push(risk.origRequests[i]);
+    origRequests.push(balance.origRequests[i]);
+    requests.push(risk.requests[i]);
+    requests.push(balance.requests[i]);
+
+    risk.responseResolves[i][0].keyName = `${i * 2}`;
+    responseResolves.push(risk.responseResolves[i]);
+    balance.responseResolves[i][0].keyName = `${i * 2 + 1}`;
+    responseResolves.push(balance.responseResolves[i]);
+  }
+
+  return { origRequests, requests, responseResolves };
+}
+
+function makeAllRequestParams() {
+  const asterSpot = makeAsterSpotRequestParams();
+  const asterFeature = makeAsterFeatureRequestParams();
+  const binanceSpot = makeBinanceSpotRequestParams();
+  const binanceFeature = makeBinanceFeatureRequestParams();
+  const binanceUnified = makeBinanceUnifiedRequestParams();
+  return { asterSpot, asterFeature, binanceSpot, binanceFeature, binanceUnified };
 }
 
 module.exports = {
-  zktlsProve, zktlsResult, doZkTls, doProve, getBinanceAccounts,
-  makeBinanceRequestParams, makeBinanaceOrigRequests,
-  makeBinanceSpotRequestParams, makeBinanaceSpotOrigRequests
+  zktlsProve, zktlsResult, doZkTls, doProve,
+  makeAsterSpotRequestParams, makeAsterFeatureRequestParams,
+  makeBinanceSpotRequestParams, makeBinanceFeatureRequestParams, makeBinanceUnifiedRequestParams,
+  makeAllRequestParams,
 };
