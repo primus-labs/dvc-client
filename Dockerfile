@@ -7,6 +7,6 @@ COPY ./package.json /dvc-client/package.json
 COPY ./node_modules /dvc-client/node_modules
 COPY ./node_modules/@primuslabs/network-core-sdk/native/lib* /dvc-client/node_modules/@primuslabs/network-core-sdk/build/Release/
 COPY ./src/utils.js /dvc-client/src/
-COPY ./src/binance.js /dvc-client/src/
+COPY ./src/unitas.js /dvc-client/src/
 
-CMD ["node", "src/binance.js"]
+CMD ["node", "src/unitas.js"]
