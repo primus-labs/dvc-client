@@ -45,17 +45,17 @@ npm install
 1. Copy `.env.example` to `.env` and set your `PRIVATE_KEY` for either Base Sepolia or Base Mainnet.
 2. Configure one or more API key pairs for each supported exchange. You may configure at least one exchange, or multiple exchanges.
    
-   * **Binance**
+   * **Binance**: (Spot and Unified)
       ```env
       BINANCE_API_KEY1=...
       BINANCE_API_SECRET1=...
       ```
-   * **Binance Classic (Optional)**
+   * **Binance Classic (Optional)**: (Spot and Futures)
       ```env
       BINANCE_CLASSIC_API_KEY1=...
       BINANCE_CLASSIC_API_SECRET1=...
       ```
-   * **Aster**
+   * **Aster**: (Spot and Futures)
       ```env
       ASTER_API_KEY1=...
       ASTER_API_SECRET1=...
