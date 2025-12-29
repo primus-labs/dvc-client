@@ -446,7 +446,7 @@ function makeBinanceSpotRequestParams() {
 }
 function makeBinanceFutureRequestParams() {
   const url = "https://fapi.binance.com/fapi/v3/balance";
-  const accounts = [...getBinanceAccounts(), ...getBinanceClassicAccounts()];
+  const accounts = getBinanceClassicAccounts();
   const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
