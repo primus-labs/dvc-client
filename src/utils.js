@@ -244,9 +244,9 @@ async function doProve(allData) {
   const mapping = [
     ["unified", allData[0]],
     ["spot", allData[1]],
-    ["feature", allData[2]],
+    ["future", allData[2]],
     ["asterSpot", allData[3]],
-    ["asterFeature", allData[4]],
+    ["asterFuture", allData[4]],
   ];
 
   for (const [key, item] of mapping) {
@@ -431,7 +431,7 @@ function makeAsterSpotRequestParams() {
   const origRequests = makerAsterOrigRequests(url);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
-function makeAsterFeatureRequestParams() {
+function makeAsterFutureRequestParams() {
   const url = "https://fapi.asterdex.com/fapi/v2/balance";
   const origRequests = makerAsterOrigRequests(url);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
@@ -442,7 +442,7 @@ function makeBinanceSpotRequestParams() {
   const origRequests = makerBinanceOrigRequests(url, { omitZeroBalances: true });
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
-function makeBinanceFeatureRequestParams() {
+function makeBinanceFutureRequestParams() {
   const url = "https://fapi.binance.com/fapi/v3/balance";
   const origRequests = makerBinanceOrigRequests(url);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
@@ -492,16 +492,16 @@ function makeBinanceUnifiedRequestParams() {
 
 function makeAllRequestParams() {
   const asterSpot = makeAsterSpotRequestParams();
-  const asterFeature = makeAsterFeatureRequestParams();
+  const asterFuture = makeAsterFutureRequestParams();
   const binanceSpot = makeBinanceSpotRequestParams();
-  const binanceFeature = makeBinanceFeatureRequestParams();
+  const binanceFuture = makeBinanceFutureRequestParams();
   const binanceUnified = makeBinanceUnifiedRequestParams();
-  return { asterSpot, asterFeature, binanceSpot, binanceFeature, binanceUnified };
+  return { asterSpot, asterFuture, binanceSpot, binanceFuture, binanceUnified };
 }
 
 module.exports = {
   zktlsProve, zktlsResult, doZkTls, doProve, checkAccounts,
-  makeAsterSpotRequestParams, makeAsterFeatureRequestParams,
-  makeBinanceSpotRequestParams, makeBinanceFeatureRequestParams, makeBinanceUnifiedRequestParams,
+  makeAsterSpotRequestParams, makeAsterFutureRequestParams,
+  makeBinanceSpotRequestParams, makeBinanceFutureRequestParams, makeBinanceUnifiedRequestParams,
   makeAllRequestParams,
 };

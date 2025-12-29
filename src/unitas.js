@@ -1,6 +1,6 @@
 const { doZkTls, doProve, checkAccounts,
-  makeAsterSpotRequestParams, makeAsterFeatureRequestParams,
-  makeBinanceSpotRequestParams, makeBinanceFeatureRequestParams, makeBinanceUnifiedRequestParams,
+  makeAsterSpotRequestParams, makeAsterFutureRequestParams,
+  makeBinanceSpotRequestParams, makeBinanceFutureRequestParams, makeBinanceUnifiedRequestParams,
 } = require("./utils.js")
 require('dotenv').config();
 
@@ -24,8 +24,8 @@ async function main() {
         allData[1] = data;
       }
       {
-        const { requests, responseResolves } = makeBinanceFeatureRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceFeatureRequestParams });
+        const { requests, responseResolves } = makeBinanceFutureRequestParams();
+        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceFutureRequestParams });
         allData[2] = data;
       }
     }
@@ -36,8 +36,8 @@ async function main() {
         allData[3] = data;
       }
       {
-        const { requests, responseResolves } = makeAsterFeatureRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterFeatureRequestParams });
+        const { requests, responseResolves } = makeAsterFutureRequestParams();
+        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterFutureRequestParams });
         allData[4] = data;
       }
     }
