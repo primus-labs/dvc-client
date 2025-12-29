@@ -349,6 +349,7 @@ function getAccounts(source) {
   return accounts;
 }
 
+function getBinanceClassicAccounts() { return getAccounts('BINANCE_CLASSIC'); }
 function getBinanceAccounts() { return getAccounts('BINANCE'); }
 function getAsterAccounts() { return getAccounts('ASTER'); }
 function checkAccounts() {
@@ -439,12 +440,14 @@ function makeAsterFutureRequestParams() {
 
 function makeBinanceSpotRequestParams() {
   const url = "https://api.binance.com/api/v3/account";
-  const origRequests = makerBinanceOrigRequests(url, { omitZeroBalances: true });
+  const accounts = [...getBinanceAccounts(), ...getBinanceClassicAccounts()];
+  const origRequests = makerOrigRequests(url, accounts, { omitZeroBalances: true });
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 function makeBinanceFutureRequestParams() {
   const url = "https://fapi.binance.com/fapi/v3/balance";
-  const origRequests = makerBinanceOrigRequests(url);
+  const accounts = [...getBinanceAccounts(), ...getBinanceClassicAccounts()];
+  const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
