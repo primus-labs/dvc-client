@@ -19,7 +19,6 @@ It currently supports the following exchanges and account categories:
 
 * **Spot Account**
   `https://sapi.asterdex.com/api/v1/account`
-
 * **Futures Account**
   `https://fapi.asterdex.com/fapi/v2/balance`
 
@@ -45,27 +44,26 @@ npm install
 1. Copy `.env.example` to `.env` and set your `PRIVATE_KEY` for either Base Sepolia or Base Mainnet.
 2. Configure one or more API key pairs for each supported exchange. You may configure at least one exchange, or multiple exchanges.
    
-   * **Binance**: (Spot and Unified)
+   * **Binance**: (KIND of Binance: at least one of spot,usds-futures,unified)
       ```env
+      BINANCE_API_KIND1=...
       BINANCE_API_KEY1=...
       BINANCE_API_SECRET1=...
       ```
-   * **Binance Classic (Optional)**: (Spot and Futures)
+   * **Aster**: (KIND of Aster: at least one of spot,usds-futures)
       ```env
-      BINANCE_CLASSIC_API_KEY1=...
-      BINANCE_CLASSIC_API_SECRET1=...
-      ```
-   * **Aster**: (Spot and Futures)
-      ```env
+      ASTER_API_KIND1=...
       ASTER_API_KEY1=...
       ASTER_API_SECRET1=...
       ```
    * **Multi-Account Support**
     To enable multi-accounts, add additional API key pairs for the same exchange by incrementing the numeric suffix:
       ```env
+      ASTER_API_KIND2=...
       BINANCE_API_KEY2=...
       BINANCE_API_SECRET2=...
 
+      ASTER_API_KIND2=...
       ASTER_API_KEY2=...
       ASTER_API_SECRET2=...
       ```
@@ -115,9 +113,8 @@ This project uses a `.env` file for runtime configuration. Below is a descriptio
 
 #### Binance API
 
-* **BINANCE_API_KEY{i}/BINANCE_API_SECRET{i}** — Additional accounts for multi-account proofs (at least one pair is required)
+* **BINANCE_API_KIND{i}/BINANCE_API_KEY{i}/BINANCE_API_SECRET{i}** — Additional accounts for multi-account proofs (at least one pair is required)
 
 #### Aster API
 
-* **ASTER_API_KEY{i}/ASTER_API_SECRET{i}** — Additional accounts for multi-account proofs (at least one pair is required)
-
+* **ASTER_API_KIND{i}/ASTER_API_KEY{i}/ASTER_API_SECRET{i}** — Additional accounts for multi-account proofs (at least one pair is required)
