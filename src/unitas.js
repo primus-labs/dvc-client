@@ -1,6 +1,6 @@
 const { doZkTls, doProve, checkAccounts,
   makeAsterSpotRequestParams, makeAsterFutureRequestParams,
-  makeBinanceSpotRequestParams, makeBinanceFutureRequestParams, makeBinanceUnifiedRequestParams,
+  makeBinanceSpotRequestParams, makeBinanceUsdSFutureRequestParams, makeBinanceUnifiedRequestParams,
 } = require("./utils.js")
 require('dotenv').config();
 
@@ -10,36 +10,34 @@ console.log(`The interval: ${interval} s.`)
 async function main() {
   console.log(`Now: ${new Date()}`);
   try {
-    const { hasBinance, hasAster } = checkAccounts();
+    const acc = checkAccounts();
+    console.log(JSON.stringify(acc));
+
     let allData = Array(5).fill(undefined);
-    if (hasBinance) {
-      {
-        const { requests, responseResolves } = makeBinanceUnifiedRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceUnifiedRequestParams });
-        allData[0] = data;
-      }
-      {
-        const { requests, responseResolves } = makeBinanceSpotRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceSpotRequestParams });
-        allData[1] = data;
-      }
-      {
-        const { requests, responseResolves } = makeBinanceFutureRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceFutureRequestParams });
-        allData[2] = data;
-      }
+    if (acc.hasBinanceUnified) {
+      const { requests, responseResolves } = makeBinanceUnifiedRequestParams();
+      const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceUnifiedRequestParams });
+      allData[0] = data;
     }
-    if (hasAster) {
-      {
-        const { requests, responseResolves } = makeAsterSpotRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterSpotRequestParams });
-        allData[3] = data;
-      }
-      {
-        const { requests, responseResolves } = makeAsterFutureRequestParams();
-        const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterFutureRequestParams });
-        allData[4] = data;
-      }
+    if (acc.hasBinanceSpot) {
+      const { requests, responseResolves } = makeBinanceSpotRequestParams();
+      const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceSpotRequestParams });
+      allData[1] = data;
+    }
+    if (acc.hasBinanceUsdSFutures) {
+      const { requests, responseResolves } = makeBinanceUsdSFutureRequestParams();
+      const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeBinanceUsdSFutureRequestParams });
+      allData[2] = data;
+    }
+    if (acc.hasAsterSpot) {
+      const { requests, responseResolves } = makeAsterSpotRequestParams();
+      const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterSpotRequestParams });
+      allData[3] = data;
+    }
+    if (acc.hasAsterUsdSFutures) {
+      const { requests, responseResolves } = makeAsterFutureRequestParams();
+      const data = await doZkTls(requests, responseResolves, { requestParamsCallback: makeAsterFutureRequestParams });
+      allData[4] = data;
     }
     // console.log('allData', JSON.stringify(allData));
 

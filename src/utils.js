@@ -251,15 +251,18 @@ async function doProve(allData) {
 
   for (const [key, item] of mapping) {
     if (!item) continue;
-    console.log('key', key)
     x ^= BigInt(item.requestid);
     attestationData[key] = item.attestationData;
+  }
+  if (x === 0n) {
+    console.warn("no any data.");
+    return {};
   }
   const requestid = "0x" + x.toString(16).padStart(64, "0");
   const zkVmRequestData = {
     attestationData,
     requestid,
-    version: "20251229", // DO NOT EDIT THIS VERSION
+    version: "20251231", // DO NOT EDIT THIS VERSION
   };
   // console.log('zkVmRequestData', JSON.stringify(zkVmRequestData));
 
@@ -319,19 +322,16 @@ async function doProve(allData) {
 }
 
 /*************************!SECTION */
-function getAccounts(source) {
-  const accounts = [];
+function getAccounts(source, kind) {
+  let accounts = [];
 
-  const key = process.env[`${source}_API_KEY`];
-  const secret = process.env[`${source}_API_SECRET`];
-  if (key && secret) {
-    accounts.push({ key, secret });
-  }
-  for (let i = 1; i <= 100; i++) {
-    const key = process.env[`${source}_API_KEY${i}`];
-    const secret = process.env[`${source}_API_SECRET${i}`];
-    if (key && secret) {
-      accounts.push({ key, secret });
+  for (let i = 0; i <= 100; i++) {
+    const suffix = i === 0 ? "" : String(i);
+    const key = process.env[`${source}_API_KEY${suffix}`]?.trim();
+    const secret = process.env[`${source}_API_SECRET${suffix}`]?.trim();
+    const kinds = (process.env[`${source}_API_KIND${suffix}`] ?? "").split(",").map(v => v.trim()).filter(Boolean);
+    if (key && secret && kinds.length > 0) {
+      accounts.push({ key, secret, kinds });
     }
   }
 
@@ -339,26 +339,54 @@ function getAccounts(source) {
     return accounts;
   }
 
+  // duplicate check
   const seen = new Set();
   for (const acc of accounts) {
-    if (seen.has(`${acc.key}${acc.secret}`)) {
+    const item = `${acc.key}${acc.secret}`;
+    if (seen.has(item)) {
       throw new Error(`Duplicate ${source}_API_KEY{i} detected`);
     }
-    seen.add(`${acc.key}${acc.secret}`);
+    seen.add(item);
   }
-  return accounts;
+
+  // kinds check
+  const allowedAsterKinds = new Set(['spot', 'usds-futures']);
+  const allowedBinanceKinds = new Set(['spot', 'usds-futures', 'unified']);
+  for (const acc of accounts) {
+    for (const kind of acc.kinds) {
+      if (source === "ASTER") {
+        if (!allowedAsterKinds.has(kind)) {
+          throw new Error(`Unsupported account kind:${kind} of ${source}`);
+        }
+      } else if (source === "BINANCE") {
+        if (!allowedBinanceKinds.has(kind)) {
+          throw new Error(`Unsupported account kind:${kind} of ${source}`);
+        }
+      }
+    }
+  }
+
+  // filter by kind
+  const filterAccounts = accounts.filter(acc => acc.kinds.includes(kind));
+  return filterAccounts;
 }
 
-function getBinanceClassicAccounts() { return getAccounts('BINANCE_CLASSIC'); }
-function getBinanceAccounts() { return getAccounts('BINANCE'); }
-function getAsterAccounts() { return getAccounts('ASTER'); }
+function getBinanceSpotAccounts() { return getAccounts('BINANCE', 'spot'); }
+function getBinanceUsdSFuturesAccounts() { return getAccounts('BINANCE', 'usds-futures'); }
+function getBinanceUnifiedAccounts() { return getAccounts('BINANCE', 'unified'); }
+function getAsterSpotAccounts() { return getAccounts('ASTER', 'spot'); }
+function getAsterUsdSFuturesAccounts() { return getAccounts('ASTER', 'usds-futures'); }
 function checkAccounts() {
-  const hasBinance = getBinanceAccounts().length > 0;
-  const hasAster = getAsterAccounts().length > 0;
-  if (!(hasBinance || hasAster)) {
+  const hasBinanceSpot = getBinanceSpotAccounts().length > 0;
+  const hasBinanceUsdSFutures = getBinanceUsdSFuturesAccounts().length > 0;
+  const hasBinanceUnified = getBinanceUnifiedAccounts().length > 0;
+  const hasAsterSpot = getAsterSpotAccounts().length > 0;
+  const hasAsterUsdSFutures = getAsterUsdSFuturesAccounts().length > 0;
+
+  if (!(hasBinanceSpot || hasBinanceUsdSFutures || hasBinanceUnified || hasAsterSpot || hasAsterUsdSFutures)) {
     throw new Error(`Please configure at least one set of BINANCE_API_KEY{i}/BINANCE_API_SECRET{i} or ASTER_API_KEY{i}/ASTER_API_SECRET{i} in .env.`);
   }
-  return { hasBinance, hasAster };
+  return { hasBinanceSpot, hasBinanceUsdSFutures, hasBinanceUnified, hasAsterSpot, hasAsterUsdSFutures };
 }
 
 function signQuery(params, secret) {
@@ -385,16 +413,6 @@ function makerOrigRequests(url, accounts, params = {}) {
   }
 
   return origRequests;
-}
-
-function makerBinanceOrigRequests(url, params = {}) {
-  const accounts = getBinanceAccounts();
-  return makerOrigRequests(url, accounts, params);
-}
-
-function makerAsterOrigRequests(url, params = {}) {
-  const accounts = getAsterAccounts();
-  return makerOrigRequests(url, accounts, params);
 }
 
 function makeZkTLSRequestParams(origRequests) {
@@ -429,38 +447,41 @@ function makeZkTLSRequestParams(origRequests) {
 
 function makeAsterSpotRequestParams() {
   const url = "https://sapi.asterdex.com/api/v1/account";
-  const origRequests = makerAsterOrigRequests(url);
+  const accounts = getAsterSpotAccounts();
+  const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 function makeAsterFutureRequestParams() {
   const url = "https://fapi.asterdex.com/fapi/v2/balance";
-  const origRequests = makerAsterOrigRequests(url);
+  const accounts = getAsterUsdSFuturesAccounts();
+  const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
 function makeBinanceSpotRequestParams() {
   const url = "https://api.binance.com/api/v3/account";
-  const accounts = [...getBinanceAccounts(), ...getBinanceClassicAccounts()];
+  const accounts = getBinanceSpotAccounts();
   const origRequests = makerOrigRequests(url, accounts, { omitZeroBalances: true });
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
-function makeBinanceFutureRequestParams() {
+function makeBinanceUsdSFutureRequestParams() {
   const url = "https://fapi.binance.com/fapi/v3/balance";
-  const accounts = getBinanceClassicAccounts();
+  const accounts = getBinanceUsdSFuturesAccounts();
   const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
-
 function makeBinanceUnifiedRiskRequestParams() {
   const url = "https://papi.binance.com/papi/v1/um/positionRisk";
-  const origRequests = makerBinanceOrigRequests(url);
+  const accounts = getBinanceUnifiedAccounts();
+  const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
 function makeBinanceUnifiedBalanceRequestParams() {
   const url = "https://papi.binance.com/papi/v1/balance";
-  const origRequests = makerBinanceOrigRequests(url);
+  const accounts = getBinanceUnifiedAccounts();
+  const origRequests = makerOrigRequests(url, accounts);
   return { origRequests, ...makeZkTLSRequestParams(origRequests) };
 }
 
@@ -497,7 +518,7 @@ function makeAllRequestParams() {
   const asterSpot = makeAsterSpotRequestParams();
   const asterFuture = makeAsterFutureRequestParams();
   const binanceSpot = makeBinanceSpotRequestParams();
-  const binanceFuture = makeBinanceFutureRequestParams();
+  const binanceFuture = makeBinanceUsdSFutureRequestParams();
   const binanceUnified = makeBinanceUnifiedRequestParams();
   return { asterSpot, asterFuture, binanceSpot, binanceFuture, binanceUnified };
 }
@@ -505,6 +526,6 @@ function makeAllRequestParams() {
 module.exports = {
   zktlsProve, zktlsResult, doZkTls, doProve, checkAccounts,
   makeAsterSpotRequestParams, makeAsterFutureRequestParams,
-  makeBinanceSpotRequestParams, makeBinanceFutureRequestParams, makeBinanceUnifiedRequestParams,
+  makeBinanceSpotRequestParams, makeBinanceUsdSFutureRequestParams, makeBinanceUnifiedRequestParams,
   makeAllRequestParams,
 };
